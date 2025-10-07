@@ -1,6 +1,4 @@
-# rnn2pwa/simulate/rollout.py
 import numpy as np
-from typing import Dict, Tuple, List
 from rnn2pwa.models.rnn_relu import RNN, forward_step, pattern_from_point
 
 def _normalize_U(U: np.ndarray, n_u: int) -> np.ndarray:
@@ -34,26 +32,21 @@ def simulate_rnn(rnn: RNN, x0: np.ndarray, U: np.ndarray) -> np.ndarray:
         X.append(x.copy())
     return np.vstack(X)
 
-def simulate_pwa_from_patterns(rnn: RNN, dyn_map: Dict, x0: np.ndarray, U: np.ndarray) -> Tuple[np.ndarray, List]:
-    U = _normalize_U(U, rnn.n_u)
-    x = _normalize_x0(x0, rnn.n_x)
-    X = [x.copy()]
-    regions = []
-    for k in range(U.shape[0]):
-        u_k = U[k].reshape(rnn.n_u,)
-        pat = pattern_from_point(rnn, x, u_k)
-        regions.append(pat)
-        A, B, c = dyn_map[pat]
-        x = A @ x + B @ u_k + c
-        X.append(x.copy())
-    return np.vstack(X), regions
+from rnn2pwa.regions.local_dynamics import local_affine_relu
 
-def build_transition_graph(rnn: RNN, X: np.ndarray, U: np.ndarray):
-    U = _normalize_U(U, rnn.n_u)
-    G = {}
-    for k in range(U.shape[0]):
-        u_k = U[k].reshape(rnn.n_u,)
-        p0 = pattern_from_point(rnn, X[k],   u_k)
-        p1 = pattern_from_point(rnn, X[k+1], u_k)
-        G.setdefault(p0, set()).add(p1)
-    return G
+def simulate_pwa_from_patterns(rnn, dyn_map, x0, u_seq):
+    X = [x0]
+    region_seq = []
+    x = x0
+    for u in u_seq:
+        pat = pattern_from_point(rnn, x, u)
+        region_seq.append(pat)
+        if pat not in dyn_map:
+            # fallback: calcola dinamica locale
+            A,B,c = local_affine_relu(rnn, pat)
+            dyn_map[pat] = (A,B,c)
+        else:
+            A,B,c = dyn_map[pat]
+        x = A @ x + B @ u + c
+        X.append(x)
+    return np.array(X), region_seq

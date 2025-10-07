@@ -1,3 +1,3 @@
 from .local_dynamics import local_affine_relu
 from .lp_feasibility import pattern_feasible_lp_relu
-from .adjacency import build_structural_adjacency
+from .adjacency import build_region_adjacency_graph

@@ -1,21 +1,24 @@
 import numpy as np
-from typing import Tuple, Optional
 from scipy.optimize import linprog
 from rnn2pwa.models.rnn_relu import RNN
 
 def pattern_feasible_lp_relu(rnn: RNN, sigma, X_bounds, U_bounds, eps=1e-6):
-    layers = rnn.layers
-    n_x, n_u = rnn.n_x, rnn.n_u
-    sizes = [L.W.shape[0] for L in layers]
+    layers = rnn.layers                        # Layers of RNN
+    n_x, n_u = rnn.n_x, rnn.n_u                # Dimension of state and input
+    sizes = [L.W.shape[0] for L in layers]     # Size of each weight matrix of each layer
 
+    # Preallocate the needed space. Idx is a dictionary containing x and u
     idx, cur = {}, 0
     idx["x"] = slice(cur, cur+n_x); cur += n_x
     idx["u"] = slice(cur, cur+n_u); cur += n_u
+
+    # For each neuron in each layer => save preactivation a{l} and hidden value h{l}
     for l, n_l in enumerate(sizes, start=1):
         idx[f"a{l}"] = slice(cur, cur+n_l); cur += n_l
         idx[f"h{l}"] = slice(cur, cur+n_l); cur += n_l
     nvar = cur
 
+    # Here we build Aeq and beq
     Aeq_rows, beq = [], []
     for l, (layer, sig_l) in enumerate(zip(layers, sigma), start=1):
         W, b = layer.W, layer.b

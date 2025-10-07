@@ -1,4 +1,3 @@
-# rnn2pwa/visualize/analysis_plots.py
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Dict, Tuple
@@ -193,3 +192,35 @@ def plot_partition_2d(
     plt.tight_layout()
     plt.show()
     return pat_to_id, labels
+
+def plot_partition_xu(rnn, X_bounds, U_bounds, grid=400, title=None):
+    from rnn2pwa.models.rnn_relu import pattern_from_point
+    xlo, xhi = float(X_bounds[0]), float(X_bounds[1])
+    ulo, uhi = float(U_bounds[0]), float(U_bounds[1])
+    xs = np.linspace(xlo, xhi, grid)
+    us = np.linspace(ulo, uhi, grid)
+    pat_to_id, next_id = {}, 0
+    lab = np.zeros((grid, grid), dtype=int)
+    for j, u in enumerate(us):
+        for i, x in enumerate(xs):
+            pat = pattern_from_point(rnn, np.array([x]), np.array([u]))
+            if pat not in pat_to_id:
+                pat_to_id[pat] = next_id; next_id += 1
+            lab[j, i] = pat_to_id[pat]
+    extent = [xs[0], xs[-1], us[0], us[-1]]
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(6.2,5.2))
+    im = plt.imshow(lab, origin="lower", extent=extent, aspect="auto",
+                    interpolation="nearest", cmap="Pastel1")
+    plt.colorbar(im, label="ID regione")
+    # contorni
+    bx = np.zeros_like(lab, dtype=bool); by = np.zeros_like(lab, dtype=bool)
+    bx[:,1:] = lab[:,1:] != lab[:, :-1]; by[1:,:] = lab[1:,:] != lab[:-1,:]
+    edges = (bx | by).astype(float)
+    U, X = np.meshgrid(us, xs, indexing="ij")
+    plt.contour(X, U, edges, levels=[0.5], linewidths=0.7, colors="k", alpha=0.45)
+    plt.xlabel("x"); plt.ylabel("u")
+    plt.title(title or f"Partizione ReLU in (x,u) | #regioni visibili={len(pat_to_id)}")
+    plt.tight_layout(); plt.show()
+    return pat_to_id, lab
+

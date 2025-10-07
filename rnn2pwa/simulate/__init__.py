@@ -1,1 +1,1 @@
-from .rollout import simulate_rnn, simulate_pwa_from_patterns, build_transition_graph
+from .rollout import simulate_rnn, simulate_pwa_from_patterns
