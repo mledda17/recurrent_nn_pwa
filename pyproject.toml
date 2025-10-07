@@ -1,27 +1,43 @@
 [build-system]
-requires = ["setuptools>=65", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
 
 [project]
 name = "rnn2pwa"
 version = "0.1.0"
-description = "ReLU-RNN to PWA: region discovery, local dynamics, simulation, and structural adjacency."
+description = "Convert ReLU RNNs to Piecewise-Affine hybrid dynamical systems"
 readme = "README.md"
-requires-python = ">=3.9"
-authors = [{name = "Marco Ledda"}]
-license = {text = "MIT"}
+license = "MIT"
+authors = [{ name = "Marco Ledda" }]
+requires-python = ">=3.10"
 dependencies = [
-  "numpy>=1.23",
-  "scipy>=1.9",
-  "matplotlib>=3.6",
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "matplotlib>=3.7",
+  "networkx>=3.0",
+  "torch>=2.2",
+  "pydantic>=2.6",   # if you prefer dataclasses, you can drop this
+  "tyro>=0.8",       # or click/typer for CLIs
 ]
 
 [project.optional-dependencies]
-graph = ["networkx>=3.1"]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov",
+  "ruff>=0.5",
+  "mypy>=1.10",
+  "pre-commit",
+  "mkdocs-material",
+  "jupyter",
+]
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["rnn2pwa*"]
+[tool.ruff]
+select = ["E","F","I","B","UP"]
+line-length = 100
 
-[tool.setuptools]
-zip-safe = false
+[tool.mypy]
+python_version = "3.10"
+strict = true
+
+[project.scripts]
+rnn2pwa = "experiments.run_convert:main"  # CLI entrypoint

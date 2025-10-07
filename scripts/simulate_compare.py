@@ -17,27 +17,28 @@ if __name__ == "__main__":
     np.random.seed(0)
     set_paper_style()
 
-    # --- Rete esempio ---
-    # Layer 1: 2 neuroni | input=[x;u]∈R^2 ⇒ W1∈R^{2×2}, b1∈R^2
-    n_x, n_u = 1, 1
+    # ===== Rete: 2 layer × 2 neuroni, con x∈R^2, u∈R
+    n_x, n_u = 2, 1
 
+    # Layer 1: (2 neuroni) prende [x;u] ∈ R^{2+1} → R^2
     W1 = np.array([
-        [1.0, 0.6],
-        [-0.8, 0.9],
-    ])
-    b1 = np.array([0.05, -0.10])
+        [0.90, -0.30, 0.60],  # neurone 1
+        [0.40, 0.70, -0.50],  # neurone 2
+    ], dtype=float)
+    b1 = np.array([0.05, -0.10], dtype=float)  # shape (2,)
 
-    # Layer 2: 1 neurone (uscita = x_{k+1}) | input=h1∈R^2 ⇒ W2∈R^{1×2}, b2∈R^1
+    # Layer 2: (2 neuroni) prende h1∈R^2 → x_{k+1}∈R^2
     W2 = np.array([
-        [0.7, -0.4]
-    ])
-    b2 = np.array([0.0])
+        [0.80, -0.20],  # neurone 1 (x1 next)
+        [-0.40, 0.90],  # neurone 2 (x2 next)
+    ], dtype=float)
+    b2 = np.array([0.00, 0.02], dtype=float)  # shape (2,)
 
     rnn = RNN(layers=[Layer(W1, b1), Layer(W2, b2)], n_x=n_x, n_u=n_u)
 
     # --- Domini (scalari) ---
-    X_bounds = (np.array([-1.5]), np.array([1.5]))
-    U_bounds = (np.array([-0.8]), np.array([0.8]))
+    X_bounds = (np.array([-1.0]), np.array([1.0]))
+    U_bounds = (np.array([-1.0]), np.array([1.0]))
 
     # --- Discovery regions and building local dynamics ---
     print("Solving Feasibility Problem")
@@ -56,7 +57,7 @@ if __name__ == "__main__":
     # Input signal type
     # 0 - Constant | 1 - Step | 2 - Ramp | 3 - Impulse
     # 4 - Sine     | 5 - Multisine | 6 - PRBS
-    signal_type = 3  # multisine for rich dynamics
+    signal_type = 5  # multisine for rich dynamics
 
     # Parametri
     sig_params = dict(
@@ -97,7 +98,7 @@ if __name__ == "__main__":
     u_seq = make_u(T, n_u, signal_type)
     u_seq = np.clip(u_seq, U_bounds[0], U_bounds[1])
 
-    x0 = np.array([0.2])
+    x0 = np.array([0.2, -0.1], dtype=float)
 
     print("Simulating RNN and PWA...")
     X_rnn = simulate_rnn(rnn, x0, u_seq)
@@ -108,7 +109,7 @@ if __name__ == "__main__":
     # ========================================
 
     # --- 1. Input signal ---
-    print("\nPlotting input signal...")
+    print("\nPlotting input signal  ...")
     time = np.arange(T + 1)
     plot_input_signal(time, u_seq)
 
@@ -122,8 +123,8 @@ if __name__ == "__main__":
 
     # --- 4. Partition (u fixed at median) ---
     print("Plotting state space partition...")
-    plot_partition_xu(rnn, X_bounds, U_bounds, grid=500,
-                      title="ReLU partition nel piano (x,u)")
+    #plot_partition_xu(rnn, X_bounds, U_bounds, grid=500,
+                      #title="ReLU partition nel piano (x,u)")
 
     G = nx.Graph()
     G.add_nodes_from(range(len(nodes)))

@@ -5,6 +5,10 @@ from collections import deque
 
 # discovery.py
 def discover_regions_via_lp(rnn, X_bounds, U_bounds, eps=1e-9):
+    """
+    Obiettivo: elencare tutte (o quante più possibili) regionid di attivazione ReLU
+    della RNN che sono realmente fattibili dento Xc e Uc.
+    """
     sizes = [L.W.shape[0] for L in rnn.layers]
     all_zero = tuple(tuple(0 for _ in range(n)) for n in sizes)
 
@@ -19,13 +23,13 @@ def discover_regions_via_lp(rnn, X_bounds, U_bounds, eps=1e-9):
             continue
         visited.add(pat)  # segna subito, così non riesamini lo stesso pat
 
-        # *** ENQUEUE SEMPRE I VICINI ***
-        for l, n_l in enumerate(sizes):
-            for i in range(n_l):
-                q = list(list(row) for row in pat)
-                q[l][i] = 1 - q[l][i]
-                q = tuple(tuple(row) for row in q)
-                if q not in visited:
+        # *** Esplorazione BFS ***
+        for l, n_l in enumerate(sizes): # Scorro i layer, l = indice del layer
+            for i in range(n_l):        # scorro i neuroni del layer l
+                q = list(list(row) for row in pat)   # copia mutabile del pattern
+                q[l][i] = 1 - q[l][i]                # flip: 0->1 o 1->0
+                q = tuple(tuple(row) for row in q)   # torna a immutabile
+                if q not in visited:                 # per evitare duplicati
                     Q.append(q)
 
         # Check feasibility via LP

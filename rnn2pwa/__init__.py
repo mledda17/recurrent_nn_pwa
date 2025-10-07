@@ -1,1 +1,2 @@
-from .models.rnn_relu import RNN, Layer, relu, forward_step, pattern_from_point
+"""rnn2pwa: Convert ReLU RNNs to Piecewise-Affine hybrid systems."""
+from .types import Pattern, Region, LocalDynamics, Guard, PWA
