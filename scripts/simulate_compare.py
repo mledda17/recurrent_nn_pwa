@@ -1,6 +1,4 @@
 import numpy as np
-import networkx as nx
-import matplotlib.pyplot as plt
 from rnn2pwa.models.rnn_relu import RNN, Layer
 from rnn2pwa.regions import build_region_adjacency_graph
 from rnn2pwa.utils.discovery import discover_regions_via_lp, build_local_dynamics_map
@@ -9,36 +7,36 @@ from rnn2pwa.simulate.rollout import simulate_rnn, simulate_pwa_from_patterns
 from rnn2pwa.visualize.trajectories import plot_trajectories, plot_error
 from rnn2pwa.visualize.style import set_paper_style
 from rnn2pwa.visualize.analysis_plots import (
-    plot_partition_2d,
-    plot_input_signal, plot_partition_xu
+    plot_input_signal,
+    plot_feasible_regions_xu
 )
 
 if __name__ == "__main__":
     np.random.seed(0)
     set_paper_style()
 
-    # ===== Rete: 2 layer × 2 neuroni, con x∈R^2, u∈R
-    n_x, n_u = 2, 1
+    # ===== Network: 2 hidden layers × 3 neurons each, with x∈R^1, u∈R^1
+    n_x, n_u = 1, 1
 
-    # Layer 1: (2 neuroni) prende [x;u] ∈ R^{2+1} → R^2
+    # Layer 1: (3 neurons) takes [x;u] ∈ R^{1+1} → R^3
     W1 = np.array([
-        [0.90, -0.30, 0.60],  # neurone 1
-        [0.40, 0.70, -0.50],  # neurone 2
+        [0.85, 0.60],   # neuron 1
+        [-0.50, 0.75],  # neuron 2
+        [0.40, -0.55],  # neuron 3
     ], dtype=float)
-    b1 = np.array([0.05, -0.10], dtype=float)  # shape (2,)
+    b1 = np.array([0.10, -0.15, 0.05], dtype=float)
 
-    # Layer 2: (2 neuroni) prende h1∈R^2 → x_{k+1}∈R^2
+    # Layer 2: (3 neurons) takes h1∈R^3 → x_{k+1}∈R^1
     W2 = np.array([
-        [0.80, -0.20],  # neurone 1 (x1 next)
-        [-0.40, 0.90],  # neurone 2 (x2 next)
+        [0.70, -0.30, 0.45],  # output neuron
     ], dtype=float)
-    b2 = np.array([0.00, 0.02], dtype=float)  # shape (2,)
+    b2 = np.array([0.02], dtype=float)
 
     rnn = RNN(layers=[Layer(W1, b1), Layer(W2, b2)], n_x=n_x, n_u=n_u)
 
-    # --- Domini (scalari) ---
-    X_bounds = (np.array([-1.0]), np.array([1.0]))
-    U_bounds = (np.array([-1.0]), np.array([1.0]))
+    # --- Domains: x ∈ R^1, u ∈ R^1 ---
+    X_bounds = (np.array([-1.0]), np.array([1.0]))  # 1D state bounds
+    U_bounds = (np.array([-1.0]), np.array([1.0]))  # 1D input bounds
 
     # --- Discovery regions and building local dynamics ---
     print("Solving Feasibility Problem")
@@ -49,9 +47,9 @@ if __name__ == "__main__":
     dyn_map = build_local_dynamics_map(rnn, patterns)
 
     nodes, edges, idmap = build_region_adjacency_graph(rnn, patterns, X_bounds, U_bounds)
-    print(f"#nodi = {len(nodes)}, #archi = {len(edges)}")
+    print(f"#nodes = {len(nodes)}, #edges = {len(edges)}")
 
-    # --- Ingresso e simulazioni ---
+    # --- Input signal and simulations ---
     T = 200
 
     # Input signal type
@@ -59,7 +57,7 @@ if __name__ == "__main__":
     # 4 - Sine     | 5 - Multisine | 6 - PRBS
     signal_type = 5  # multisine for rich dynamics
 
-    # Parametri
+    # Parameters
     sig_params = dict(
         value=0.0,
         amp=0.3,
@@ -94,11 +92,10 @@ if __name__ == "__main__":
         q = prbs(T, n_u, amp=0.1, bitlen=max(3, p["bitlen"] // 2))
         return s + q
 
-
     u_seq = make_u(T, n_u, signal_type)
     u_seq = np.clip(u_seq, U_bounds[0], U_bounds[1])
 
-    x0 = np.array([0.2, -0.1], dtype=float)
+    x0 = np.array([0.2], dtype=float)
 
     print("Simulating RNN and PWA...")
     X_rnn = simulate_rnn(rnn, x0, u_seq)
@@ -109,7 +106,7 @@ if __name__ == "__main__":
     # ========================================
 
     # --- 1. Input signal ---
-    print("\nPlotting input signal  ...")
+    print("\nPlotting input signal...")
     time = np.arange(T + 1)
     plot_input_signal(time, u_seq)
 
@@ -121,17 +118,17 @@ if __name__ == "__main__":
     print("Plotting tracking error...")
     plot_error(time, X_rnn, X_pwa)
 
-    # --- 4. Partition (u fixed at median) ---
-    print("Plotting state space partition...")
-    #plot_partition_xu(rnn, X_bounds, U_bounds, grid=500,
-                      #title="ReLU partition nel piano (x,u)")
-
-    G = nx.Graph()
-    G.add_nodes_from(range(len(nodes)))
-    G.add_edges_from(edges)
-    plt.figure(figsize=(6, 5))
-    nx.draw(G, with_labels=True, node_size=400, font_size=8)
-    plt.title("Grafo delle regioni (nodi=pattern, archi=regioni confinanti)")
-    plt.show()
+    # --- 4. Partition showing ONLY feasible regions in (x,u) space ---
+    print("Plotting feasible regions in (x,u) space...")
+    plot_feasible_regions_xu(
+        rnn,
+        patterns,
+        witnesses,
+        X_bounds,
+        U_bounds,
+        grid=1000,
+        x_axis=0,  # Only one state dimension
+        title="Feasible ReLU Regions in (x,u) space"
+    )
 
     print("\n=== All plots generated successfully! ===")

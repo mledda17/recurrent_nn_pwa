@@ -224,3 +224,217 @@ def plot_partition_xu(rnn, X_bounds, U_bounds, grid=400, title=None):
     plt.tight_layout(); plt.show()
     return pat_to_id, lab
 
+
+import numpy as np
+import matplotlib.pyplot as plt
+from typing import Dict, List, Tuple
+from rnn2pwa.models.rnn_relu import RNN, pattern_from_point
+
+
+def plot_feasible_regions_xu(
+        rnn: RNN,
+        patterns: List[Tuple[Tuple[int, ...], ...]],
+        witnesses: Dict,
+        X_bounds: Tuple[np.ndarray, np.ndarray],
+        U_bounds: Tuple[np.ndarray, np.ndarray],
+        grid: int = 400,
+        title: str = None,
+        x_axis: int = 0,  # which state dimension to plot on x-axis
+):
+    """
+    Visualize ONLY the feasible regions found via LP.
+
+    For multi-dimensional state spaces, this plots one state dimension vs input.
+    Other state dimensions are fixed at their midpoint.
+
+    Args:
+        rnn: The RNN model
+        patterns: List of feasible patterns from discover_regions_via_lp
+        witnesses: Dict mapping patterns to (x_witness, u_witness)
+        X_bounds: State bounds (lo, hi) - arrays of shape (n_x,)
+        U_bounds: Input bounds (lo, hi) - arrays of shape (n_u,)
+        grid: Resolution for sampling
+        title: Plot title
+        x_axis: Which state dimension to vary (default: 0)
+    """
+    n_x = rnn.n_x
+    n_u = rnn.n_u
+
+    # For scalar input case
+    if n_u == 1:
+        ulo, uhi = float(U_bounds[0][0]), float(U_bounds[1][0])
+    else:
+        ulo, uhi = float(U_bounds[0]), float(U_bounds[1])
+
+    # Extract bounds for the selected state dimension
+    xlo, xhi = float(X_bounds[0][x_axis]), float(X_bounds[1][x_axis])
+
+    xs = np.linspace(xlo, xhi, grid)
+    us = np.linspace(ulo, uhi, grid)
+
+    # Create mapping: feasible pattern -> compact ID
+    feasible_set = set(patterns)
+    pat_to_id = {pat: i for i, pat in enumerate(patterns)}
+
+    # Initialize label grid (-1 means infeasible/not found)
+    lab = -np.ones((grid, grid), dtype=int)
+
+    # Fix other state dimensions at midpoint
+    x_fixed = (X_bounds[0] + X_bounds[1]) / 2.0
+
+    # Sample the space
+    for j, u_val in enumerate(us):
+        for i, x_val in enumerate(xs):
+            # Build full state vector
+            x = x_fixed.copy()
+            x[x_axis] = x_val
+
+            # Build full input vector
+            if n_u == 1:
+                u = np.array([u_val])
+            else:
+                u = np.full(n_u, u_val)
+
+            pat = pattern_from_point(rnn, x, u)
+
+            # Only color if pattern is feasible
+            if pat in feasible_set:
+                lab[j, i] = pat_to_id[pat]
+
+    # Plot
+    extent = [xs[0], xs[-1], us[0], us[-1]]
+    plt.figure(figsize=(7, 5.5))
+
+    # Use a masked array to hide infeasible regions
+    lab_masked = np.ma.masked_where(lab == -1, lab)
+
+    im = plt.imshow(
+        lab_masked,
+        origin="lower",
+        extent=extent,
+        aspect="auto",
+        interpolation="nearest",
+        cmap="tab20",  # Better for many distinct regions
+        alpha=0.9
+    )
+
+    # Plot witness points
+    for pat in patterns:
+        if pat in witnesses:
+            xw, uw = witnesses[pat]
+            # Plot the x_axis dimension vs first input dimension
+            plt.plot(xw[x_axis], uw[0], 'k.', markersize=4, alpha=0.6)
+
+    plt.colorbar(im, label="Region ID")
+
+    # Add region boundaries
+    bx = np.zeros_like(lab, dtype=bool)
+    by = np.zeros_like(lab, dtype=bool)
+    bx[:, 1:] = (lab[:, 1:] != lab[:, :-1]) & (lab[:, 1:] != -1) & (lab[:, :-1] != -1)
+    by[1:, :] = (lab[1:, :] != lab[:-1, :]) & (lab[1:, :] != -1) & (lab[:-1, :] != -1)
+    edges = (bx | by).astype(float)
+
+    U, X = np.meshgrid(us, xs, indexing="ij")
+    plt.contour(X, U, edges, levels=[0.5], linewidths=0.8, colors="k", alpha=0.5)
+
+    plt.xlabel(f"$x_{x_axis + 1}$")
+    plt.ylabel("u")
+
+    n_feasible = len(patterns)
+    n_visible = np.sum(lab >= 0)
+    coverage = 100 * n_visible / (grid * grid)
+
+    if title is None:
+        title = (f"Feasible ReLU Regions in (x,u) space\n"
+                 f"{n_feasible} feasible regions | "
+                 f"{coverage:.1f}% coverage")
+
+    plt.title(title)
+    plt.tight_layout()
+    plt.show()
+
+    print(f"\nRegion Statistics:")
+    print(f"  Total feasible patterns: {n_feasible}")
+    print(f"  Grid points in feasible regions: {n_visible}/{grid * grid}")
+    print(f"  Coverage: {coverage:.2f}%")
+
+    return pat_to_id, lab
+
+
+def plot_feasible_regions_2d_state(
+        rnn: RNN,
+        patterns: List[Tuple[Tuple[int, ...], ...]],
+        witnesses: Dict,
+        X_bounds: Tuple[np.ndarray, np.ndarray],
+        U_fixed: np.ndarray,
+        axes: Tuple[int, int] = (0, 1),
+        grid: int = 300,
+        title: str = None,
+):
+    """
+    Visualize feasible regions in 2D state space with fixed input.
+    Only shows patterns that were proven feasible via LP.
+    """
+    (x_lo, x_hi) = X_bounds
+    ax1, ax2 = axes
+
+    xs = np.linspace(x_lo[ax1], x_hi[ax1], grid)
+    ys = np.linspace(x_lo[ax2], x_hi[ax2], grid)
+
+    feasible_set = set(patterns)
+    pat_to_id = {pat: i for i, pat in enumerate(patterns)}
+
+    lab = -np.ones((grid, grid), dtype=int)
+    mid = (x_lo + x_hi) * 0.5
+
+    for j, y in enumerate(ys):
+        for i, x1 in enumerate(xs):
+            x = mid.copy()
+            x[ax1] = x1
+            x[ax2] = y
+            pat = pattern_from_point(rnn, x, U_fixed)
+
+            if pat in feasible_set:
+                lab[j, i] = pat_to_id[pat]
+
+    extent = [xs[0], xs[-1], ys[0], ys[-1]]
+    plt.figure(figsize=(6.5, 5.2))
+
+    lab_masked = np.ma.masked_where(lab == -1, lab)
+    im = plt.imshow(
+        lab_masked,
+        origin="lower",
+        extent=extent,
+        interpolation="nearest",
+        aspect="auto",
+        cmap="tab20",
+        alpha=0.95
+    )
+
+    # Boundaries
+    bx = np.zeros_like(lab, dtype=bool)
+    by = np.zeros_like(lab, dtype=bool)
+    bx[:, 1:] = (lab[:, 1:] != lab[:, :-1]) & (lab[:, 1:] != -1) & (lab[:, :-1] != -1)
+    by[1:, :] = (lab[1:, :] != lab[:-1, :]) & (lab[1:, :] != -1) & (lab[:-1, :] != -1)
+    edges = (bx | by).astype(float)
+
+    YY, XX = np.meshgrid(ys, xs, indexing="ij")
+    plt.contour(XX, YY, edges, levels=[0.5], linewidths=0.7, colors="k", alpha=0.4)
+
+    plt.xlabel(f"$x_{ax1 + 1}$")
+    plt.ylabel(f"$x_{ax2 + 1}$")
+
+    n_feasible = len(patterns)
+    n_visible = np.sum(lab >= 0)
+    coverage = 100 * n_visible / (grid * grid)
+
+    if title is None:
+        title = (f"Feasible ReLU Regions (u={np.array2string(U_fixed, precision=2)})\n"
+                 f"{n_feasible} feasible | {coverage:.1f}% coverage")
+
+    plt.title(title)
+    plt.colorbar(im, label="Region ID")
+    plt.tight_layout()
+    plt.show()
+
+    return pat_to_id, lab
