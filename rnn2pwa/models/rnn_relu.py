@@ -17,27 +17,28 @@ def relu(v: np.ndarray) -> np.ndarray:
     return np.maximum(0.0, v)
 
 def forward_step(rnn: RNN, x: np.ndarray, u: np.ndarray) -> np.ndarray:
-    x = np.asarray(x).reshape(-1)
-    u = np.asarray(u).reshape(-1)
-    if x.size != rnn.n_x:
-        raise ValueError(f"[forward_step] x ha dim {x.size}, atteso {rnn.n_x}")
-    if u.size != rnn.n_u:
-        raise ValueError(f"[forward_step] u ha dim {u.size}, atteso {rnn.n_u}")
+    x = np.asarray(x).reshape(-1); u = np.asarray(u).reshape(-1)
     h = np.concatenate([x, u])
-    for layer in rnn.layers:
+    L = len(rnn.layers)
+    # hidden layers 1..L-1: Linear + ReLU
+    for layer in rnn.layers[:-1]:
         a = layer.W @ h + layer.b
         h = relu(a)
-    return h
+    # last layer L: Linear ONLY
+    W_L, b_L = rnn.layers[-1].W, rnn.layers[-1].b
+    y = W_L @ h + b_L
+    return y
 
+# --- rnn_relu.py: pattern_from_point ---
 def pattern_from_point(rnn: RNN, x: np.ndarray, u: np.ndarray) -> Tuple[Tuple[int,...], ...]:
-    x = np.asarray(x).reshape(-1)
-    u = np.asarray(u).reshape(-1)
-    if x.size != rnn.n_x or u.size != rnn.n_u:
-        raise ValueError(f"[pattern_from_point] shape err: x {x.shape}, u {u.shape}")
+    x = np.asarray(x).reshape(-1); u = np.asarray(u).reshape(-1)
     h = np.concatenate([x, u])
     sigmas = []
-    for layer in rnn.layers:
+    L = len(rnn.layers)
+    # solo hidden layers (niente ultimo layer)
+    for layer in rnn.layers[:-1]:
         a = layer.W @ h + layer.b
-        sigmas.append(tuple((a > 0.0).astype(int).tolist()))
+        sigmas.append(tuple((a >= 0.0).astype(int).tolist()))
         h = relu(a)
     return tuple(sigmas)
+

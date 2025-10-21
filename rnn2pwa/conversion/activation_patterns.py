@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Set, Tuple, Iterable
+from typing import Set, Tuple
 import numpy as np
 from torch import nn
 from ..relu_rnn.eval import pattern_of

@@ -115,7 +115,8 @@ def build_region_adjacency_graph(
     edges: Set[Tuple[int, int]] = set()
 
     patset = set(nodes)
-    sizes = [L.W.shape[0] for L in rnn.layers]
+    sizes = [L.W.shape[0] for L in rnn.layers[:-1]]
+
 
     # Per ogni pattern, prova a flippare 1 neurone per volta: candidato vicino
     for p in nodes:

@@ -1,7 +1,27 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from typing import List, Dict, Tuple
-from rnn2pwa.models.rnn_relu import RNN, pattern_from_point
+import matplotlib as mpl
+import matplotlib.colors as mcolors
+from rnn2pwa.models.rnn_relu import RNN
+
+mpl.rcParams.update({
+    # --- Sizes and layout ---
+    "font.size": 8.5,
+    "axes.labelsize": 9,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "legend.fontsize": 8,
+
+    # --- Lines and figure ---
+    "axes.linewidth": 0.7,
+    "lines.linewidth": 0.8,
+    "lines.markersize": 3,
+    "figure.figsize": (3.35, 2.5),
+    "figure.dpi": 200,
+    "savefig.dpi": 600,
+    "savefig.bbox": "tight",
+    "savefig.pad_inches": 0.02,
+})
 
 def compute_partition_labels_2d(
     rnn: RNN,
@@ -232,133 +252,127 @@ from rnn2pwa.models.rnn_relu import RNN, pattern_from_point
 
 
 def plot_feasible_regions_xu(
-        rnn: RNN,
-        patterns: List[Tuple[Tuple[int, ...], ...]],
-        witnesses: Dict,
-        X_bounds: Tuple[np.ndarray, np.ndarray],
-        U_bounds: Tuple[np.ndarray, np.ndarray],
-        grid: int = 400,
-        title: str = None,
-        x_axis: int = 0,  # which state dimension to plot on x-axis
+        rnn,
+        patterns,
+        witnesses,
+        X_bounds,
+        U_bounds,
+        grid=400,
+        title=None,
+        x_axis=0,
+        save=False,
+        outdir="plots",
+        basename="xu_regions"
 ):
-    """
-    Visualize ONLY the feasible regions found via LP.
+    import os
+    from scipy import ndimage
+    import matplotlib.pyplot as plt
+    import matplotlib.colors as mcolors
 
-    For multi-dimensional state spaces, this plots one state dimension vs input.
-    Other state dimensions are fixed at their midpoint.
-
-    Args:
-        rnn: The RNN model
-        patterns: List of feasible patterns from discover_regions_via_lp
-        witnesses: Dict mapping patterns to (x_witness, u_witness)
-        X_bounds: State bounds (lo, hi) - arrays of shape (n_x,)
-        U_bounds: Input bounds (lo, hi) - arrays of shape (n_u,)
-        grid: Resolution for sampling
-        title: Plot title
-        x_axis: Which state dimension to vary (default: 0)
-    """
     n_x = rnn.n_x
     n_u = rnn.n_u
 
-    # For scalar input case
-    if n_u == 1:
-        ulo, uhi = float(U_bounds[0][0]), float(U_bounds[1][0])
-    else:
-        ulo, uhi = float(U_bounds[0]), float(U_bounds[1])
-
-    # Extract bounds for the selected state dimension
+    ulo, uhi = float(U_bounds[0][0]), float(U_bounds[1][0])
     xlo, xhi = float(X_bounds[0][x_axis]), float(X_bounds[1][x_axis])
 
     xs = np.linspace(xlo, xhi, grid)
     us = np.linspace(ulo, uhi, grid)
 
-    # Create mapping: feasible pattern -> compact ID
     feasible_set = set(patterns)
     pat_to_id = {pat: i for i, pat in enumerate(patterns)}
-
-    # Initialize label grid (-1 means infeasible/not found)
     lab = -np.ones((grid, grid), dtype=int)
-
-    # Fix other state dimensions at midpoint
     x_fixed = (X_bounds[0] + X_bounds[1]) / 2.0
 
-    # Sample the space
+    from rnn2pwa.models.rnn_relu import pattern_from_point
+
+    # Sampling
     for j, u_val in enumerate(us):
         for i, x_val in enumerate(xs):
-            # Build full state vector
-            x = x_fixed.copy()
-            x[x_axis] = x_val
-
-            # Build full input vector
-            if n_u == 1:
-                u = np.array([u_val])
-            else:
-                u = np.full(n_u, u_val)
-
+            x = x_fixed.copy(); x[x_axis] = x_val
+            u = np.array([u_val])
             pat = pattern_from_point(rnn, x, u)
-
-            # Only color if pattern is feasible
             if pat in feasible_set:
                 lab[j, i] = pat_to_id[pat]
 
-    # Plot
     extent = [xs[0], xs[-1], us[0], us[-1]]
-    plt.figure(figsize=(7, 5.5))
-
-    # Use a masked array to hide infeasible regions
+    plt.figure(figsize=(7, 6))
     lab_masked = np.ma.masked_where(lab == -1, lab)
+    n_regions = len(patterns)
 
+    # --- Colormap base ---
+    base_cmap = plt.cm.get_cmap("tab20", n_regions)
+    norm = mcolors.BoundaryNorm(boundaries=np.arange(-0.5, n_regions + 0.5, 1), ncolors=n_regions)
     im = plt.imshow(
-        lab_masked,
-        origin="lower",
-        extent=extent,
-        aspect="auto",
-        interpolation="nearest",
-        cmap="tab20",  # Better for many distinct regions
-        alpha=0.9
+        lab_masked, origin="lower", extent=extent, aspect="auto",
+        cmap=base_cmap, norm=norm, interpolation="nearest", alpha=0.9
     )
 
-    # Plot witness points
-    for pat in patterns:
-        if pat in witnesses:
-            xw, uw = witnesses[pat]
-            # Plot the x_axis dimension vs first input dimension
-            plt.plot(xw[x_axis], uw[0], 'k.', markersize=4, alpha=0.6)
+    # ======================================================
+    #   BORDI colorati con il colore scuro della regione
+    # ======================================================
+    colors = [mcolors.to_rgb(base_cmap(i)) for i in range(n_regions)]
 
-    plt.colorbar(im, label="Region ID")
+    # edge detection per ogni regione
+    for region_id in range(n_regions):
+        mask = lab == region_id
+        if not np.any(mask):
+            continue
+        # calcola i bordi del cluster
+        edge_mask = np.zeros_like(mask, dtype=bool)
+        edge_mask[:, 1:] |= mask[:, 1:] != mask[:, :-1]
+        edge_mask[1:, :] |= mask[1:, :] != mask[:-1, :]
+        # colorazione bordo con versione più scura
+        r, g, b = colors[region_id]
+        dark = (r * 0.6, g * 0.6, b * 0.6)
+        Y, X = np.meshgrid(us, xs, indexing="ij")
+        plt.contour(
+            X, Y, edge_mask.astype(float),
+            levels=[0.5],
+            colors=[dark],
+            linewidths=0.9,
+            alpha=0.9
+        )
 
-    # Add region boundaries
-    bx = np.zeros_like(lab, dtype=bool)
-    by = np.zeros_like(lab, dtype=bool)
-    bx[:, 1:] = (lab[:, 1:] != lab[:, :-1]) & (lab[:, 1:] != -1) & (lab[:, :-1] != -1)
-    by[1:, :] = (lab[1:, :] != lab[:-1, :]) & (lab[1:, :] != -1) & (lab[:-1, :] != -1)
-    edges = (bx | by).astype(float)
+    plt.xlabel(r"$x$")
+    plt.ylabel(r"$u$")
+    plt.xticks([-2, 0, 2])
+    plt.yticks([-2, 0, 2])
+    plt.title(title or "Feasible ReLU Regions in (x,u)")
 
-    U, X = np.meshgrid(us, xs, indexing="ij")
-    plt.contour(X, U, edges, levels=[0.5], linewidths=0.8, colors="k", alpha=0.5)
+    # --- Etichette centrali ---
+    for region_id, pat in enumerate(patterns):
+        mask = lab == region_id
+        if not np.any(mask):
+            continue
+        cy, cx = ndimage.center_of_mass(mask)
+        if np.isnan(cx) or np.isnan(cy):
+            continue
+        x_c = xs[int(round(cx))]
+        u_c = us[int(round(cy))]
+        pattern_str = "|".join("".join(map(str, sub)) for sub in pat)
+        plt.text(
+            x_c, u_c, f"{region_id}\n{pattern_str}",
+            ha="center", va="center", fontsize=6.5,
+            color="black", weight="bold",
+            bbox=dict(boxstyle="round,pad=0.2", facecolor="white", alpha=0.5, lw=0)
+        )
 
-    plt.xlabel(f"$x_{x_axis + 1}$")
-    plt.ylabel("u")
+    cbar = plt.colorbar(im, ticks=np.arange(n_regions))
+    cbar.set_label("Region ID")
 
-    n_feasible = len(patterns)
-    n_visible = np.sum(lab >= 0)
-    coverage = 100 * n_visible / (grid * grid)
-
-    if title is None:
-        title = (f"Feasible ReLU Regions in (x,u) space\n"
-                 f"{n_feasible} feasible regions | "
-                 f"{coverage:.1f}% coverage")
-
-    plt.title(title)
     plt.tight_layout()
+
+    # ====== SAVE OPTION ======
+    if save:
+        os.makedirs(outdir, exist_ok=True)
+        pdf_path = os.path.join(outdir, f"{basename}.pdf")
+        png_path = os.path.join(outdir, f"{basename}.png")
+        plt.savefig(pdf_path, bbox_inches="tight", pad_inches=0.02)
+        plt.savefig(png_path, dpi=600, bbox_inches="tight", pad_inches=0.02)
+        print(f"[SAVED] {pdf_path}\n[SAVED] {png_path}")
+
     plt.show()
 
-    print(f"\nRegion Statistics:")
-    print(f"  Total feasible patterns: {n_feasible}")
-    print(f"  Grid points in feasible regions: {n_visible}/{grid * grid}")
-    print(f"  Coverage: {coverage:.2f}%")
-
-    return pat_to_id, lab
 
 
 def plot_feasible_regions_2d_state(
@@ -428,13 +442,90 @@ def plot_feasible_regions_2d_state(
     n_visible = np.sum(lab >= 0)
     coverage = 100 * n_visible / (grid * grid)
 
-    if title is None:
-        title = (f"Feasible ReLU Regions (u={np.array2string(U_fixed, precision=2)})\n"
-                 f"{n_feasible} feasible | {coverage:.1f}% coverage")
-
-    plt.title(title)
-    plt.colorbar(im, label="Region ID")
+    #plt.colorbar(im, label="Region ID")
     plt.tight_layout()
     plt.show()
 
     return pat_to_id, lab
+
+
+import os
+import numpy as np
+from typing import List, Tuple, Optional
+
+def export_trajectory_xu_path_dat(
+    t: np.ndarray,
+    X: np.ndarray,              # (T+1, n_x)
+    U: np.ndarray,              # (T, n_u) oppure (T+1, n_u)
+    outdir: str = "plots",
+    basename: str = "traj_xu_path",
+    x_axis: int = 0,            # quale stato mettere sull’asse x
+    u_axis: int = 0,            # quale ingresso sull’asse u
+    region_ids: Optional[np.ndarray] = None,   # (K,) opzionale: id regione lungo traiettoria
+    thin_markers: int = 1       # ogni quanti campioni mettere marker distinti (per alleggerire)
+):
+    """
+    Esporta la traiettoria nello spazio (x,u) come:
+      - plots/traj_xu_path.dat   colonne: k  t  x  u  reg
+        (reg = -1 se non fornito)
+      - plots/traj_xu_start.dat  (un solo punto: start)
+      - plots/traj_xu_end.dat    (un solo punto: end)
+
+    La polilinea in PGFPlots si ottiene con \addplot table ... di 'traj_xu_path.dat'.
+    """
+    os.makedirs(outdir, exist_ok=True)
+
+    # Assicura 1D per t
+    t = np.asarray(t).reshape(-1)
+    X = np.asarray(X)
+    U = np.asarray(U)
+
+    # Allinea lunghezze: usiamo K = min(len(U), len(X))
+    # e abbiniamo (x_k, u_k) per k=0..K-1; il tempo è t[:K]
+    K = min(X.shape[0], U.shape[0])
+    k_vec = np.arange(K)
+    t_vec = t[:K]
+    x_vec = X[:K, x_axis].reshape(-1)
+    u_vec = U[:K, u_axis].reshape(-1)
+
+    if region_ids is None:
+        reg = -np.ones(K, dtype=int)
+    else:
+        reg = np.asarray(region_ids).reshape(-1)[:K]
+        if reg.shape[0] < K:
+            pad = -np.ones(K - reg.shape[0], dtype=int)
+            reg = np.concatenate([reg, pad], axis=0)
+
+    # Scrivi file principale (per linea + eventuali marker colorati)
+    path_path = os.path.join(outdir, f"{basename}.dat")
+    with open(path_path, "w") as f:
+        f.write("k\tt\tx\tu\treg\n")
+        for k, tt, xv, uv, rv in zip(k_vec, t_vec, x_vec, u_vec, reg):
+            f.write(f"{int(k)}\t{tt:.10g}\t{xv:.10g}\t{uv:.10g}\t{int(rv)}\n")
+
+    # Start / End (comodi per marker dedicati)
+    start_path = os.path.join(outdir, f"{basename}_start.dat")
+    end_path   = os.path.join(outdir, f"{basename}_end.dat")
+    np.savetxt(start_path, np.array([[x_vec[0], u_vec[0]]]),
+               header="x\tu", fmt="%.10g", comments="")
+    np.savetxt(end_path,   np.array([[x_vec[-1], u_vec[-1]]]),
+               header="x\tu", fmt="%.10g", comments="")
+
+    # (Opzionale) versione "snellita" solo per marker radi
+    if thin_markers > 1:
+        idx = np.arange(K)[::thin_markers]
+        thin_path = os.path.join(outdir, f"{basename}_marks_thin.dat")
+        with open(thin_path, "w") as f:
+            f.write("k\tt\tx\tu\treg\n")
+            for i in idx:
+                f.write(f"{int(k_vec[i])}\t{t_vec[i]:.10g}\t{x_vec[i]:.10g}\t{u_vec[i]:.10g}\t{int(reg[i])}\n")
+    else:
+        thin_path = None
+
+    print(f"[PGF] wrote {path_path}")
+    print(f"[PGF] wrote {start_path}")
+    print(f"[PGF] wrote {end_path}")
+    if thin_path:
+        print(f"[PGF] wrote {thin_path}")
+
+    return path_path, start_path, end_path, thin_path
