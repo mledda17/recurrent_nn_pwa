@@ -31,7 +31,7 @@ _All authors are with the DIEE, University of Cagliari, 09123 Cagliari, Italy._
 First of all, you will need to clone this repository. To do this, run the following command:
 
 ```bash
-git clone 
+git clone https://github.com/mledda17/recurrent_nn_pwa.git
 ```
 
 ### 2. Install requirements and dependecies
