@@ -13,6 +13,8 @@ from rnn2pwa.visualize.analysis_plots import (
     export_trajectory_xu_path_dat
 )
 
+
+
 if __name__ == "__main__":
     np.random.seed(0)
     set_paper_style()
