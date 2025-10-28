@@ -41,12 +41,10 @@ Install dependencies via:
 pip install -r requirements.txt
 ```
 
-```
-
 ### 3. Run numerical validation
 All experiments can be executed using the following command:
 ```bash
-python3 scripts/simulate_compare.py
+python scripts/simulate_compare.py
 ```
 
 The results of the experiments will be put in a new folder "scripts/plots".
