@@ -5,10 +5,10 @@
 Official code for the paper: **"Recurrent Neural Networks with ReLU activations are Continuous Piecewise Affine Systems Dynamical Systems and Viceversa"**
 
 Authors:
-- Marco Ledda, Student, IEEE
-- Diego Deplano, Member, IEEE
-- Alessandro Giua, Fellow, IEEE
-- Mauro Franceschelli, Senior, IEEE
+- Marco Ledda, PhD Student
+- Diego Deplano, Researcher
+- Alessandro Giua, Full Professor
+- Mauro Franceschelli, Associate Professor
 
 _All authors are with the DIEE, University of Cagliari, 09123 Cagliari, Italy._
 
